@@ -6,6 +6,13 @@ import math
 import random
 import numpy as np
 
+# Based on previous work from Simon Rouhou, Luc Jaulin and others from Codac team (codac.io)
+
+# In particular :
+# https://github.com/codac-team/codac/tree/master/doc/doc/tutorial/07-data-association
+# Simon Rohou, Benoît Desrochers, Luc Jaulin
+# ICRA 2020, Paris
+
 class myCtc(Ctc):
 
   def __init__(self, map_):
