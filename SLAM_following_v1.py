@@ -3,7 +3,6 @@ from vibes import *
 from codac import *
 from codac import SepPolarXY
 import math
-import random
 import numpy as np
 
 # Based on previous work from Simon Rouhou, Luc Jaulin and others from Codac team (codac.io)
@@ -40,9 +39,10 @@ def control(a,b,x):
     return u
 
 def ref_evolution(x_ref,u,dt): # supposed unfirom speed of 1 (to be tuned)
-  return [x_ref[0] + dt*1*cos(x_ref[2]),
-          x_ref[1] + dt*1*sin(x_ref[2]),
-          x_ref[2] + dt*u]
+  rng=np.random.default_rng()
+  return [x_ref[0] + dt*(1*cos(x_ref[2]) + 0.1*rng.standard_normal()),
+          x_ref[1] + dt*(1*sin(x_ref[2]) + 0.1*rng.standard_normal()),
+          x_ref[2] + dt*(u + 5*math.pi/180*rng.standard_normal())]
 
 # Objective : line to follow (supposed horizontal here)
 a,b=np.array([0,0]),np.array([10,0])
@@ -53,7 +53,7 @@ dt,tmax = 0.05,10 # tube timestep
 tdomain = Interval(0,tmax)
 
 # Initial pose x0
-x0 = (0,0,-math.pi/3)
+x0 = (0,0,+math.pi/3)
 # System input
 u0,u_values = 0,{}
 x_ref=TrajectoryVector(3)
@@ -84,7 +84,7 @@ fig_map.set_properties(50, 50, 400, 400) # position and size
 fig_map.draw_vehicle(x0,size=1)
 
 # Creating random map of landmarks
-nb_landmarks = 4
+nb_landmarks = 10
 map_area = IntervalVector(2,[-10,10])
 fig_map.axis_limits(map_area.inflate(10))
 v_map = DataLoader.generate_landmarks_boxes(map_area, nb_landmarks)
@@ -96,19 +96,16 @@ for t in np.arange(dt,tmax,dt):
     x_ref.set(xt_ref,t)
     u_ref.set(control(a,b,xt_ref),t)
 
-    # Continuous estimated heading (NOT measurements : supposed no compass or GPS)
-    estimated_heading=x_ref[2]+RandTrajectory(tdomain_online, dt, Interval(-0.01,0.01)) # adding some noise)
-
     # Sets of trajectories
     x = TubeVector(tdomain_online, dt, 3)                    # 4d tube for state vectors
     v = TubeVector(tdomain_online, dt, 3)                    # 4d tube for derivatives of the states
     u = Tube(tdomain_online, dt)                    # tube for input of the system
-    x[2] = Tube(estimated_heading, dt).inflate(0.05)       # estimated_heading by control & motion evolution
+    x[2] = Tube(x_ref[2], dt).inflate(5*math.pi/180)       # estimated_heading by control & motion evolution
   
     # Sets of observations
 
     # Generating observations obs=(t,range,bearing) of these landmarks from current center point 'x_ref' AND current borders 
-    max_nb_obs = nb_landmarks 
+    max_nb_obs = nb_landmarks // 2 # arbitrary number of detected landmarks, to be tuned
     visi_range = Interval() 
     visi_angle = Interval() # NON frontal sonar
     v_obs = DataLoader.generate_observations(x_ref, v_map, max_nb_obs, True, visi_range, visi_angle)
@@ -116,8 +113,8 @@ for t in np.arange(dt,tmax,dt):
     # Adding uncertainties on the measurements
     for obs in v_obs:
         
-        obs[1].inflate(0.1) # range, initially 0.1
-        obs[2].inflate(0.05) # bearing
+        obs[1].inflate(1.5) # range inflated by 1.5m
+        obs[2].inflate(0.1*math.pi/180) # bearing initially 0.1 deg
     
 
     # Association set
@@ -154,11 +151,12 @@ for t in np.arange(dt,tmax,dt):
 #    x_all.set(x(tdomain_online_sub),tdomain_online_sub)
 #    u_all.set(u(tdomain_online_sub),tdomain_online_sub)#    if (x(t).subvector(0,1)).volume() < 20:
 
-    if (x(t).subvector(0,1)).volume() < 20: # not drawing outliers 
+    if not (x(t).is_empty() and x(t).volume() < 20) : # not drawing outliers for the moment for readability
       fig_map.draw_box(x(t).subvector(0,1),'black[]')
+    for i in range(0,len(v_obs)):
+      if (not m[i].is_empty() and m[i].volume() < 20):
+        fig_map.draw_box(m[i],'red[orange]')
 
-for i in range(0,len(v_obs)):
-    fig_map.draw_box(m[i],'red[orange]')
 fig_map.show()
 
 beginDrawing()
